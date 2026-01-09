@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+	<title>Volume</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+			background: #1a1a1a;
+			color: #fff;
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			min-height: 100vh;
+			padding: 20px;
+			touch-action: manipulation;
+		}
+
+		.container {
+			display: flex;
+			flex-direction: column;
+			text-align: center;
+			max-width: 400px;
+			width: 100%;
+			height: 100vh;
+		}
+
+		.inner-container {
+			display: flex;
+			flex-direction: column;
+			justify-content: center;
+			align-items: center;
+			margin-top: auto;
+			margin-bottom: auto;
+		}
+
+		.status-container {
+			width: 80vw;
+		}
+
+		.status {
+			text-align: center;
+			padding: 12px 20px;
+			border-radius: 8px;
+			margin-bottom: auto;
+			margin-top: 20px;
+			font-weight: 600;
+			transition: background 0.3s;
+		}
+
+		.status.disconnected {
+			background: #cc3333;
+		}
+
+		.status.connected {
+			background: #33cc33;
+		}
+
+		.vca-label {
+			font-size: 24px;
+			margin-bottom: 20px;
+			font-weight: 300;
+		}
+
+		.level-display {
+			font-size: 48px;
+			font-weight: 700;
+			margin-bottom: 30px;
+		}
+
+		.controls {
+			display: flex;
+			gap: 20px;
+			justify-content: center;
+		}
+
+		.btn {
+			width: 120px;
+			height: 120px;
+			border: none;
+			border-radius: 12px;
+			font-size: 48px;
+			font-weight: 700;
+			cursor: pointer;
+			transition: all 0.15s;
+			user-select: none;
+			-webkit-tap-highlight-color: transparent;
+		}
+
+		.btn:active {
+			transform: scale(0.95);
+		}
+
+		.btn-minus {
+			background: #cc3333;
+			color: #fff;
+		}
+
+		.btn-minus:hover {
+			background: #dd4444;
+		}
+
+		.btn-minus:active {
+			background: #bb2222;
+		}
+
+		.btn-plus {
+			background: #33cc33;
+			color: #fff;
+		}
+
+		.btn-plus:hover {
+			background: #44dd44;
+		}
+
+		.btn-plus:active {
+			background: #22bb22;
+		}
+
+		.debug {
+			margin-top: 30px;
+			padding: 15px;
+			background: #2a2a2a;
+			border-radius: 8px;
+			font-size: 12px;
+			font-family: 'Courier New', monospace;
+			text-align: left;
+			max-height: 200px;
+			overflow-y: auto;
+		}
+
+		.debug-line {
+			margin-bottom: 5px;
+			color: #888;
+		}
+	</style>
+</head>
+<body>
+	<div class="status-container">
+		<div class="status disconnected" id="status">Connecting...</div>
+	</div>
+		<div class="inner-container">
+		<div class="vca-label">Volume</div>
+		<div class="level-display" id="level">0.00</div>
+		<div class="controls">
+			<button class="btn btn-minus" id="btn-minus">−</button>
+			<button class="btn btn-plus" id="btn-plus">+</button>
+		</div>
+		</div>
+		<!--<div class="debug" id="debug"></div>-->
+
+	<script>
+		const MIXER_IP = window.location.hostname || 'localhost';
+		const VCA_PARAM = 'v.0.mix';
+		let STEP = 0.1;
+
+		let socket = null;
+		let isConnected = false;
+		let currentLevel = 0.0;
+
+		const statusEl = document.getElementById('status');
+		var levelEl = document.getElementById('level');
+		const debugEl = document.getElementById('debug');
+		const btnMinus = document.getElementById('btn-minus');
+		const btnPlus = document.getElementById('btn-plus');
+
+		/*
+		function //log(message) {
+			const line = document.createElement('div');
+			line.className = 'debug-line';
+			line.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+			debugEl.insertBefore(line, debugEl.firstChild);
+
+			while (debugEl.children.length > 20) {
+				debugEl.removeChild(debugEl.lastChild);
+			}
+		}
+		*/
+
+		function updateStatus(connected) {
+			isConnected = connected;
+			statusEl.textContent = connected ? 'Connected' : 'Disconnected';
+			statusEl.className = `status ${connected ? 'connected' : 'disconnected'}`;
+			btnMinus.disabled = !connected;
+			btnPlus.disabled = !connected;
+		}
+
+		function updateLevel(value) {
+			currentLevel = parseFloat(value);
+			//levelEl.textContent = currentLevel.toFixed(2);
+
+			decimalValue = currentLevel / 0.4;
+			percentageValue = 100 * decimalValue;
+
+			const displayValue = Math.round(percentageValue);
+
+			levelEl.textContent = displayValue + '%';
+
+			if (currentLevel == 0.0) {
+				STEP = 0.05
+			} else if (currentLevel <= 0.1 && currentLevel != 0.0) {
+				STEP = 0.025
+			} else if (currentLevel <= 0.4) {
+				STEP = 0.05
+			} else if (currentLevel <= 0.6) {
+				STEP = 0.075
+			} else {
+				STEP = 0.1
+			}
+		}
+
+		function sendCommand(command) {
+			if (socket && isConnected) {
+				socket.send(command);
+				//log(`Sent: ${command}`);
+			}
+		}
+
+		function adjustLevel(delta) {
+			const newLevel = Math.max(0, Math.min(1, currentLevel + delta));
+			currentLevel = newLevel;
+			updateLevel(newLevel);
+			sendCommand(`SETD^${VCA_PARAM}^${newLevel.toFixed(2)}`);
+		}
+
+		async function loadSocketIO() {
+			if (typeof window.io !== 'undefined') {
+				return window.io;
+			}
+
+			return new Promise((resolve, reject) => {
+				const script = document.createElement('script');
+				script.src = '/socket.io.min.js';
+				script.onload = () => resolve(window.io);
+				script.onerror = () => reject(new Error('Failed to load Socket.IO'));
+				document.head.appendChild(script);
+			});
+		}
+
+		function cleanupExistingConnections(io) {
+			if (socket) {
+				socket.removeAllListeners();
+				socket.disconnect(true);
+				socket = null;
+			}
+
+			if (io && io.sockets) {
+				const mixerUrl = `http://${window.location.host}`;
+				const sockets = Object.keys(io.sockets);
+				for (let i = 0; i < sockets.length; i++) {
+					if (sockets[i].includes(mixerUrl) || sockets[i].includes(window.location.hostname)) {
+						//log(`Cleaning up existing socket: ${sockets[i]}`);
+						delete io.sockets[sockets[i]];
+					}
+				}
+			}
+		}
+
+		async function connect() {
+			try {
+				//log('Loading Socket.IO v0.9.17...');
+				const io = await loadSocketIO();
+
+				//log('Connecting to mixer via proxy...');
+
+				cleanupExistingConnections(io);
+
+				const mixerUrl = `http://${window.location.host}`;
+				//log(`Creating new socket connection to: ${mixerUrl}`);
+
+				socket = io.connect(mixerUrl, {
+					'reconnection limit': 3000,
+					'max reconnection attempts': Infinity,
+					forceNew: true
+				});
+
+				const timeout = setTimeout(() => {
+					//log('Connection timeout - cleaning up');
+					if (socket) {
+						socket.removeAllListeners();
+						socket.disconnect();
+					}
+					updateStatus(false);
+				}, 10000);
+
+			socket.on('connect', () => {
+				clearTimeout(timeout);
+				//log('Socket.IO connected successfully');
+				updateStatus(true);
+
+				const timestamp = Date.now();
+				const timezoneOffset = new Date().getTimezoneOffset();
+				const userTimeCommand = `USERTIME^${timestamp}^${timezoneOffset}`;
+				//log(`Sending USERTIME: ${userTimeCommand}`);
+				socket.send(userTimeCommand);
+
+				//log('Sending SERIAL command');
+				socket.send('SERIAL');
+
+				setInterval(() => {
+					if (isConnected && socket) {
+						socket.send('ALIVE');
+					}
+				}, 5000);
+			});
+
+			socket.on('disconnect', () => {
+				clearTimeout(timeout);
+				//log('Socket.IO disconnected');
+				updateStatus(false);
+			});
+
+			socket.on('error', (error) => {
+				clearTimeout(timeout);
+				//log(`Socket error: ${error}`);
+				updateStatus(false);
+			});
+
+			socket.on('message', (data) => {
+				let cleanData = data;
+				if (typeof data === 'string' && data.includes(':::')) {
+					cleanData = data.substring(data.indexOf(':::') + 3);
+				}
+
+				// Handle multi-line messages
+				if (cleanData && cleanData.includes('\n')) {
+					const lines = cleanData.split('\n');
+					lines.forEach(line => processMessage(line));
+				} else {
+					processMessage(cleanData);
+				}
+			});
+
+			function processMessage(message) {
+				if (!message) return;
+
+				if (message.startsWith('SETD^')) {
+					const parts = message.split('^', 3);
+					if (parts.length >= 3) {
+						const param = parts[1];
+						const value = parts[2];
+
+						if (param === VCA_PARAM) {
+							updateLevel(value);
+							//log(`VCA1 level: ${value}`);
+						}
+					}
+				} else if (message.startsWith('SERIAL^')) {
+					const serial = message.substring(7);
+					//log(`Mixer serial: ${serial}`);
+				}
+			}
+
+
+			socket.on('connecting', () => {
+				//log('Socket.IO connecting...');
+			});
+
+			socket.on('reconnect_failed', () => {
+				//log('Socket.IO reconnect failed');
+				if (socket) {
+					socket.disconnect();
+					socket.socket.reconnect();
+				}
+			});
+			} catch (error) {
+				//log(`Connection error: ${error.message}`);
+			}
+		}
+
+		btnMinus.addEventListener('click', () => adjustLevel(-STEP));
+		btnPlus.addEventListener('click', () => adjustLevel(STEP));
+
+		connect();
+	</script>
+</body>
+</html>
