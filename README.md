@@ -4,6 +4,12 @@ Connect to a stationary Soundcraft UI-series mixer with a custom UI. Great for s
 
 ![alt text](https://software.collinsgroup.fi/web/Screenshot%202026-01-09%20at%2012.21.55.png "Simple UI")
 
+## Step-by-step walkthrough
+These steps assume you're installing a UI-mixer to *some location*, and only need to expose the overall volume of a certain group of inputs.
+1. Get a Raspberry Pi, any model will do. A LAN connection is recommended, though the messages will be transferred reasonably well over a WLAN too. This machine does not need to be connected to the Internet, but it should be accessed by devices in the same network.
+2. Once the RPB has been installed and is running, run this command: `sudo apt update && sudo apt upgrade && sudo apt install npm && sudo npm install pm2 -g && cd soundcraft-ui && npm install && pm2 start server.js -n SoundcraftVolControl && pm2 save`
+3. Connect to the RPB's IP address, and to port `3000`.
+
 ## Configuration
 
 The code is configured assuming:
@@ -25,7 +31,7 @@ Example: `SETD^v.0.mix^0.7796` sets `VCA 1` `volume` at `≈ unity`
 
 ## Known issues
 
-Soundcraft uses the version of Socket.IO that the dinosaurs used. Safari doesn't generally like this, so for embed systems either Chromium or anything other than a WebKit browser will do. 
+Soundcraft uses the version of Socket.IO that the dinosaurs used. Safari doesn't generally like this, so for embed systems either Chromium or anything other than a WebKit browser will do.
 
 ## Custom functions for commercial settings
 With this proxy, you can build a custom frontend for the mixer. The image below shows an example from an [OB1](https://fremen.fi/software/ob1) used in radio productions. For custom-build-related requests, [contact Fremen](https://fremen.fi/contact).
